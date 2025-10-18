@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Leaderboard - Trivia{% endblock %}
+
+{% block content %}
+<!-- Leaderboard Header -->
+<div class="row mb-4">
+    <div class="col-12 text-center">
+        <h1 class="display-4">
+            <i class="bi bi-trophy-fill text-warning"></i> Leaderboard
+        </h1>
+        <p class="lead text-muted">Top scores from all players</p>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="row mb-4">
+    <div class="col-12 col-lg-8 offset-lg-2">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <form method="GET" action="{{ url_for('leaderboard') }}" class="row g-3">
+                    <div class="col-md-6">
+                        <label for="difficulty" class="form-label">Filter by Difficulty</label>
+                        <select class="form-select" id="difficulty" name="difficulty" onchange="this.form.submit()">
+                            <option value="" {% if not difficulty_filter %}selected{% endif %}>All Difficulties</option>
+                            <option value="easy" {% if difficulty_filter == 'easy' %}selected{% endif %}>Easy</option>
+                            <option value="medium" {% if difficulty_filter == 'medium' %}selected{% endif %}>Medium</option>
+                            <option value="hard" {% if difficulty_filter == 'hard' %}selected{% endif %}>Hard</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="limit" class="form-label">Number of Entries</label>
+                        <select class="form-select" id="limit" name="limit" onchange="this.form.submit()">
+                            <option value="25">Top 25</option>
+                            <option value="50" selected>Top 50</option>
+                            <option value="100">Top 100</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Leaderboard Table -->
+<div class="row">
+    <div class="col-12">
+        {% if scores %}
+        <div class="card shadow">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped">
+                        <thead class="table-dark">
+                            <tr>
+                                <th scope="col" class="text-center" style="width: 80px;">Rank</th>
+                                <th scope="col">Name</th>
+                                <th scope="col" class="text-center">Score</th>
+                                <th scope="col" class="text-center">Total</th>
+                                <th scope="col" class="text-center">Accuracy</th>
+                                <th scope="col" class="text-center">Difficulty</th>
+                                <th scope="col" class="text-center">Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for score in scores %}
+                            <tr class="{% if loop.index <= 3 %}table-warning{% endif %}">
+                                <td class="text-center">
+                                    {% if loop.index == 1 %}
+                                        <span class="badge bg-warning text-dark fs-6">🥇 1st</span>
+                                    {% elif loop.index == 2 %}
+                                        <span class="badge bg-secondary fs-6">🥈 2nd</span>
+                                    {% elif loop.index == 3 %}
+                                        <span class="badge bg-secondary fs-6">🥉 3rd</span>
+                                    {% else %}
+                                        <span class="badge bg-light text-dark">{{ loop.index }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <strong>{{ score.name }}</strong>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-success fs-6">{{ score.score|int }}</span>
+                                </td>
+                                <td class="text-center">
+                                    {{ score.total }}
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-{% if score.accuracy >= 90 %}success{% elif score.accuracy >= 70 %}info{% elif score.accuracy >= 50 %}warning{% else %}danger{% endif %}">
+                                        {{ score.accuracy|round(1) }}%
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-{% if score.difficulty == 'easy' %}success{% elif score.difficulty == 'medium' %}warning{% elif score.difficulty == 'hard' %}danger{% else %}secondary{% endif %}">
+                                        {{ score.difficulty|capitalize if score.difficulty else 'Any' }}
+                                    </span>
+                                </td>
+                                <td class="text-center text-muted small">
+                                    {{ score.created_at[:10] }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12">
+            <div class="alert alert-info text-center" role="alert">
+                <i class="bi bi-info-circle-fill"></i>
+                <h5 class="mt-2">No scores yet!</h5>
+                <p class="mb-0">Be the first to play and get on the leaderboard!</p>
+                <a href="{{ url_for('index') }}" class="btn btn-primary mt-3">
+                    <i class="bi bi-play-circle-fill"></i> Start Playing
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Stats Summary -->
+{% if scores %}
+<div class="row mt-4">
+    <div class="col-12 col-lg-8 offset-lg-2">
+        <div class="card shadow-sm bg-light">
+            <div class="card-body text-center">
+                <h6 class="text-muted mb-0">
+                    Showing {{ scores|length }} entries
+                    {% if difficulty_filter %}
+                        ({{ difficulty_filter|capitalize }} difficulty)
+                    {% endif %}
+                </h6>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Call to Action -->
+<div class="row mt-4">
+    <div class="col-12 text-center">
+        <a href="{{ url_for('index') }}" class="btn btn-primary btn-lg">
+            <i class="bi bi-play-circle-fill"></i> Challenge Yourself
+        </a>
+    </div>
+</div>
+
+{% endblock %}

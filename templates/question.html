@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}Question {{ index + 1 }} of {{ total }} - Trivia{% endblock %}
+
+{% block content %}
+<!-- Progress Bar -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="mb-0">Progress</h6>
+                    <span class="badge bg-primary">Question {{ index + 1 }} of {{ total }}</span>
+                </div>
+                <div class="progress" style="height: 25px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                         role="progressbar" 
+                         style="width: {{ ((index + 1) / total * 100)|int }}%"
+                         aria-valuenow="{{ index + 1 }}" 
+                         aria-valuemin="0" 
+                         aria-valuemax="{{ total }}">
+                        {{ ((index + 1) / total * 100)|int }}%
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Question Card -->
+<div class="row">
+    <div class="col-12 col-lg-10 offset-lg-1">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">
+                        <i class="bi bi-question-circle-fill"></i> Question {{ index + 1 }}
+                    </h4>
+                    <div>
+                        <span class="badge bg-{{ 'success' if question.difficulty == 'easy' else 'warning' if question.difficulty == 'medium' else 'danger' }}">
+                            {{ question.difficulty|capitalize }}
+                        </span>
+                        <span class="badge bg-light text-dark">
+                            {{ 'Multiple Choice' if question.type == 'multiple' else 'True/False' }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Category -->
+                <p class="text-muted mb-3">
+                    <i class="bi bi-tag-fill"></i> {{ question.category }}
+                </p>
+                
+                <!-- Question Text -->
+                <h5 class="mb-4">{{ question.question }}</h5>
+                
+                <!-- Answer Form -->
+                <form method="POST" action="{{ url_for('answer') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="d-grid gap-3">
+                        {% for answer in question.answers %}
+                        <div class="form-check answer-option">
+                            <input class="form-check-input" 
+                                   type="radio" 
+                                   name="answer" 
+                                   id="answer{{ loop.index0 }}" 
+                                   value="{{ loop.index0 }}"
+                                   required>
+                            <label class="form-check-label w-100" for="answer{{ loop.index0 }}">
+                                <div class="card answer-card">
+                                    <div class="card-body">
+                                        <strong>{{ ['A', 'B', 'C', 'D'][loop.index0] }}.</strong> {{ answer }}
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="mt-4 d-flex justify-content-between">
+                        <form method="POST" action="{{ url_for('clear_session') }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-outline-danger">
+                                <i class="bi bi-x-circle"></i> Quit Game
+                            </button>
+                        </form>
+                        
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-check-circle-fill"></i> Submit Answer
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Score Display -->
+<div class="row mt-4">
+    <div class="col-12 col-lg-10 offset-lg-1">
+        <div class="card shadow-sm">
+            <div class="card-body text-center">
+                <h6 class="text-muted mb-0">
+                    Current Score: <span class="badge bg-success">{{ session.game.score|int }}</span>
+                </h6>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.answer-option {
+    margin-bottom: 0;
+}
+
+.answer-card {
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 2px solid #dee2e6;
+}
+
+.answer-card:hover {
+    border-color: #0d6efd;
+    box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,.075);
+    transform: translateY(-2px);
+}
+
+.form-check-input:checked + .form-check-label .answer-card {
+    background-color: #e7f1ff;
+    border-color: #0d6efd;
+    font-weight: 500;
+}
+
+.form-check-input {
+    display: none;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Make entire card clickable
+document.querySelectorAll('.answer-card').forEach(card => {
+    card.addEventListener('click', function() {
+        const input = this.closest('.form-check').querySelector('input[type="radio"]');
+        input.checked = true;
+    });
+});
+</script>
+{% endblock %}
