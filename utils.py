@@ -216,6 +216,49 @@ def get_difficulty_badge_class(difficulty: str) -> str:
     return classes.get(difficulty.lower(), 'secondary')
 
 
+def validate_mixed_difficulty(easy: str, medium: str, hard: str) -> dict:
+    """
+    Validate mixed difficulty parameters
+    
+    Args:
+        easy: Number of easy questions
+        medium: Number of medium questions
+        hard: Number of hard questions
+    
+    Returns:
+        Dictionary with validated counts
+    
+    Raises:
+        ValueError: If parameters are invalid
+    """
+    try:
+        easy_count = int(easy) if easy else 0
+        medium_count = int(medium) if medium else 0
+        hard_count = int(hard) if hard else 0
+        
+        if easy_count < 0 or medium_count < 0 or hard_count < 0:
+            raise ValueError("Question counts must be non-negative")
+        
+        total = easy_count + medium_count + hard_count
+        
+        if total < 1:
+            raise ValueError("At least one question must be requested")
+        
+        if total > 50:
+            raise ValueError("Total questions cannot exceed 50")
+        
+        return {
+            'easy': easy_count,
+            'medium': medium_count,
+            'hard': hard_count,
+            'total': total
+        }
+    except ValueError as e:
+        if "invalid literal" in str(e):
+            raise ValueError("Question counts must be valid integers")
+        raise
+
+
 def truncate_text(text: str, max_length: int = 100) -> str:
     """
     Truncate text to maximum length

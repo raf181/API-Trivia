@@ -4,10 +4,12 @@ Integrates with OpenTDB API for trivia questions
 """
 import os
 import time
+import random
 from datetime import datetime
 from functools import lru_cache
 import hashlib
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
 from flask_wtf.csrf import CSRFProtect
@@ -17,7 +19,8 @@ from dotenv import load_dotenv
 from models import init_db, save_score, get_leaderboard, get_db_connection
 from utils import (
     validate_amount, validate_difficulty, validate_type, validate_encode,
-    decode_html_entities, shuffle_answers, get_response_code_message
+    decode_html_entities, shuffle_answers, get_response_code_message,
+    validate_mixed_difficulty
 )
 
 # Load environment variables
@@ -38,14 +41,14 @@ init_db()
 # OpenTDB API Configuration
 OPENTDB_BASE_URL = 'https://opentdb.com/api.php'
 OPENTDB_TOKEN_URL = 'https://opentdb.com/api_token.php'
-API_TIMEOUT = 5  # seconds
-API_RETRIES = 2
-API_BACKOFF = 0.3  # seconds
+API_TIMEOUT = 3  # seconds - fail fast for better UX
+API_RETRIES = 1  # retry attempts - one retry only
+API_BACKOFF = 0.3  # seconds - minimal backoff
 
 # Simple in-memory cache for API responses
 api_cache = {}
 cache_timestamps = {}
-CACHE_TTL = 60  # seconds
+CACHE_TTL = 300  # seconds (5 minutes) - increased for better performance
 
 
 def get_cache_key(params):
@@ -83,6 +86,7 @@ def fetch_trivia_questions(params, use_cache=True):
             return True, cached, 0
     
     start_time = time.time()
+    last_error = None
     
     for attempt in range(API_RETRIES + 1):
         try:
@@ -101,20 +105,133 @@ def fetch_trivia_questions(params, use_cache=True):
                     set_cached_response(cache_key, data)
                 
                 return True, data, latency_ms
+            elif response.status_code == 429:
+                # Rate limited - don't retry immediately
+                last_error = 'Rate limited by API'
+                break  # Stop trying
+            else:
+                last_error = f'HTTP {response.status_code}'
+                break  # Don't retry HTTP errors
             
         except requests.Timeout:
+            last_error = 'Request timeout'
+            # Apply backoff before retry
             if attempt < API_RETRIES:
-                time.sleep(API_BACKOFF * (attempt + 1))
-                continue
-            return False, {'error': 'Request timeout'}, (time.time() - start_time) * 1000
+                time.sleep(API_BACKOFF)
+            continue
         
-        except requests.RequestException as e:
+        except requests.ConnectionError:
+            last_error = 'Connection error'
+            # Apply backoff before retry
             if attempt < API_RETRIES:
-                time.sleep(API_BACKOFF * (attempt + 1))
-                continue
-            return False, {'error': str(e)}, (time.time() - start_time) * 1000
+                time.sleep(API_BACKOFF)
+            continue
+            
+        except requests.RequestException as e:
+            last_error = str(e)
+            break  # Don't retry other exceptions
     
-    return False, {'error': 'Max retries exceeded'}, (time.time() - start_time) * 1000
+    return False, {'error': last_error or 'Max retries exceeded'}, (time.time() - start_time) * 1000
+
+
+def fetch_mixed_difficulty_questions(difficulty_counts, category='', q_type='', encode=''):
+    """
+    Fetch questions from multiple difficulty levels in parallel and combine them
+    
+    Args:
+        difficulty_counts: Dict with 'easy', 'medium', 'hard' counts
+        category: Category ID (optional)
+        q_type: Question type (optional)
+        encode: Encoding type (optional)
+    
+    Returns:
+        Tuple of (success: bool, combined_questions: list, error_message: str)
+    """
+    all_questions = []
+    errors = []
+    
+    # Prepare all API requests
+    fetch_tasks = []
+    for difficulty in ['easy', 'medium', 'hard']:
+        count = difficulty_counts.get(difficulty, 0)
+        if count == 0:
+            continue
+        
+        # Build params for this difficulty
+        params = {
+            'amount': count,
+            'difficulty': difficulty
+        }
+        
+        if q_type:
+            params['type'] = q_type
+        if encode:
+            params['encode'] = encode
+        if category:
+            try:
+                params['category'] = int(category)
+            except ValueError:
+                pass
+        
+        fetch_tasks.append((difficulty, count, params))
+    
+    # Fetch all difficulties in parallel using ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        # Submit all fetch tasks - enable cache for speed
+        future_to_difficulty = {
+            executor.submit(fetch_trivia_questions, params, True): (difficulty, count)
+            for difficulty, count, params in fetch_tasks
+        }
+        
+        # Collect results as they complete
+        for future in as_completed(future_to_difficulty):
+            difficulty, count = future_to_difficulty[future]
+            try:
+                success, data, latency_ms = future.result()
+                
+                if not success:
+                    error_msg = f"Failed to fetch {difficulty} questions: {data.get('error', 'Unknown error')}"
+                    errors.append(error_msg)
+                    continue
+                
+                if data.get('response_code') != 0:
+                    message = get_response_code_message(data.get('response_code'))
+                    error_msg = f"API Error for {difficulty} questions: {message}"
+                    errors.append(error_msg)
+                    continue
+                
+                questions = data.get('results', [])
+                if len(questions) < count:
+                    error_msg = f"Not enough {difficulty} questions available (requested {count}, got {len(questions)})"
+                    errors.append(error_msg)
+                    # Use what we got instead of failing completely
+                    if questions:
+                        all_questions.extend(questions)
+                    continue
+                
+                all_questions.extend(questions)
+                
+            except Exception as e:
+                error_msg = f"Exception fetching {difficulty} questions: {str(e)}"
+                errors.append(error_msg)
+    
+    # If we got at least some questions, consider it a partial success
+    if all_questions:
+        # Shuffle the combined questions to mix difficulties
+        random.shuffle(all_questions)
+        
+        if errors:
+            # Warn about partial success
+            warning = f"Got {len(all_questions)} questions, but some requests failed: {'; '.join(errors)}"
+            return True, all_questions, warning
+        
+        return True, all_questions, ''
+    
+    # Complete failure
+    if errors:
+        return False, [], ' | '.join(errors)
+    
+    return False, [], 'No questions could be fetched'
 
 
 @app.route('/')
@@ -169,48 +286,93 @@ def api_preview():
 def play():
     """Initialize game session"""
     if request.method == 'POST':
-        # Validate parameters
-        try:
-            amount = validate_amount(request.form.get('amount', '10'))
-            difficulty = validate_difficulty(request.form.get('difficulty', ''))
-            q_type = validate_type(request.form.get('type', ''))
-            encode = validate_encode(request.form.get('encode', ''))
-            category = request.form.get('category', '')
-            
-        except ValueError as e:
-            flash(str(e), 'danger')
-            return redirect(url_for('index'))
+        # Check if mixed difficulty mode
+        difficulty_mode = request.form.get('difficulty_mode', 'single')
         
-        # Build API parameters
-        params = {'amount': amount}
-        if difficulty:
-            params['difficulty'] = difficulty
-        if q_type:
-            params['type'] = q_type
-        if encode:
-            params['encode'] = encode
-        if category:
+        if difficulty_mode == 'mixed':
+            # Handle mixed difficulty
             try:
-                params['category'] = int(category)
-            except ValueError:
-                pass
-        
-        # Fetch questions
-        success, data, latency_ms = fetch_trivia_questions(params, use_cache=False)
-        
-        if not success:
-            flash(f"Failed to fetch questions: {data.get('error', 'Unknown error')}", 'danger')
-            return redirect(url_for('index'))
-        
-        if data.get('response_code') != 0:
-            message = get_response_code_message(data.get('response_code'))
-            flash(f"API Error: {message}", 'danger')
-            return redirect(url_for('index'))
-        
-        questions = data.get('results', [])
-        if not questions:
-            flash("No questions returned from API", 'warning')
-            return redirect(url_for('index'))
+                easy_count = request.form.get('easy_count', '0')
+                medium_count = request.form.get('medium_count', '0')
+                hard_count = request.form.get('hard_count', '0')
+                
+                difficulty_counts = validate_mixed_difficulty(easy_count, medium_count, hard_count)
+                
+                q_type = validate_type(request.form.get('type', ''))
+                encode = validate_encode(request.form.get('encode', ''))
+                category = request.form.get('category', '')
+                
+            except ValueError as e:
+                flash(str(e), 'danger')
+                return redirect(url_for('index'))
+            
+            # Fetch mixed difficulty questions
+            success, questions, error_msg = fetch_mixed_difficulty_questions(
+                difficulty_counts, category, q_type, encode
+            )
+            
+            if not success:
+                flash(error_msg, 'danger')
+                return redirect(url_for('index'))
+            
+            # Show warning if partial success
+            if error_msg:
+                flash(f'Warning: {error_msg}', 'warning')
+            
+            # Store params for session
+            params = {
+                'difficulty': 'mixed',
+                'easy': difficulty_counts['easy'],
+                'medium': difficulty_counts['medium'],
+                'hard': difficulty_counts['hard']
+            }
+            if q_type:
+                params['type'] = q_type
+            if category:
+                params['category'] = category
+        else:
+            # Handle single difficulty (original behavior)
+            try:
+                amount = validate_amount(request.form.get('amount', '10'))
+                difficulty = validate_difficulty(request.form.get('difficulty', ''))
+                q_type = validate_type(request.form.get('type', ''))
+                encode = validate_encode(request.form.get('encode', ''))
+                category = request.form.get('category', '')
+                
+            except ValueError as e:
+                flash(str(e), 'danger')
+                return redirect(url_for('index'))
+            
+            # Build API parameters
+            params = {'amount': amount}
+            if difficulty:
+                params['difficulty'] = difficulty
+            if q_type:
+                params['type'] = q_type
+            if encode:
+                params['encode'] = encode
+            if category:
+                try:
+                    params['category'] = int(category)
+                except ValueError:
+                    pass
+            
+            # Fetch questions
+            success, data, latency_ms = fetch_trivia_questions(params, use_cache=False)
+            
+            if not success:
+                flash(f"Failed to fetch questions: {data.get('error', 'Unknown error')}", 'danger')
+                return redirect(url_for('index'))
+            
+            if data.get('response_code') != 0:
+                message = get_response_code_message(data.get('response_code'))
+                flash(f"API Error: {message}", 'danger')
+                return redirect(url_for('index'))
+            
+            questions = data.get('results', [])
+            if not questions:
+                flash("No questions returned from API", 'warning')
+                return redirect(url_for('index'))
         
         # Process questions: decode and shuffle
         processed_questions = []
@@ -348,7 +510,13 @@ def results():
             score = int(game['score'])
             total = len(game['questions'])
             accuracy = (score / total * 100) if total > 0 else 0
-            difficulty = game['params'].get('difficulty', 'any')
+            
+            # Format difficulty for display and storage
+            params = game['params']
+            if params.get('difficulty') == 'mixed':
+                difficulty = f"mixed (E:{params.get('easy',0)}/M:{params.get('medium',0)}/H:{params.get('hard',0)})"
+            else:
+                difficulty = params.get('difficulty', 'any')
             
             save_score(name, score, total, accuracy, difficulty)
             flash(f'Score saved to leaderboard! 🏆', 'success')

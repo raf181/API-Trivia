@@ -120,48 +120,144 @@
                     Configure your trivia game and start playing!
                 </p>
                 
-                <form method="POST" action="{{ url_for('play') }}">
+                <form method="POST" action="{{ url_for('play') }}" id="playForm">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="difficulty_mode" id="difficulty_mode" value="single">
                     
-                    <div class="row g-3">
-                        <!-- Amount -->
-                        <div class="col-md-6 col-lg-3">
-                            <label for="play_amount" class="form-label">Number of Questions</label>
-                            <input type="number" class="form-control" id="play_amount" 
-                                   name="amount" value="10" min="1" max="50" required>
-                            <div class="form-text">1-50 questions</div>
+                    <!-- Difficulty Mode Toggle -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="btn-group w-100" role="group" aria-label="Difficulty mode">
+                                <input type="radio" class="btn-check" name="mode_toggle" id="mode_single" checked>
+                                <label class="btn btn-outline-primary" for="mode_single" onclick="toggleDifficultyMode('single')">
+                                    <i class="bi bi-square-fill"></i> Single Difficulty
+                                </label>
+                                
+                                <input type="radio" class="btn-check" name="mode_toggle" id="mode_mixed">
+                                <label class="btn btn-outline-primary" for="mode_mixed" onclick="toggleDifficultyMode('mixed')">
+                                    <i class="bi bi-layers-fill"></i> Mixed Difficulty
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Single Difficulty Controls -->
+                    <div id="single_difficulty_controls">
+                        <div class="row g-3">
+                            <!-- Amount -->
+                            <div class="col-md-6 col-lg-3">
+                                <label for="play_amount" class="form-label">Number of Questions</label>
+                                <input type="number" class="form-control" id="play_amount" 
+                                       name="amount" value="10" min="1" max="50">
+                                <div class="form-text">1-50 questions</div>
+                            </div>
+                            
+                            <!-- Category -->
+                            <div class="col-md-6 col-lg-3">
+                                <label for="play_category" class="form-label">Category</label>
+                                <select class="form-select" id="play_category" name="category">
+                                    <option value="">Any Category</option>
+                                    {% for cat in opentdb_categories %}
+                                        <option value="{{ cat.id }}">{{ cat.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            
+                            <!-- Difficulty -->
+                            <div class="col-md-6 col-lg-3">
+                                <label for="play_difficulty" class="form-label">Difficulty</label>
+                                <select class="form-select" id="play_difficulty" name="difficulty">
+                                    <option value="">Any Difficulty</option>
+                                    <option value="easy">Easy</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="hard">Hard</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Type -->
+                            <div class="col-md-6 col-lg-3">
+                                <label for="play_type" class="form-label">Type</label>
+                                <select class="form-select" id="play_type" name="type">
+                                    <option value="">Any Type</option>
+                                    <option value="multiple">Multiple Choice</option>
+                                    <option value="boolean">True/False</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Mixed Difficulty Controls -->
+                    <div id="mixed_difficulty_controls" style="display: none;">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> 
+                            <strong>Mix it up!</strong> Specify how many questions you want from each difficulty level. 
+                            Total must be between 1-50 questions.
+                            <br><small><strong>Tip:</strong> If you encounter API errors, try reducing the total number of questions or select a specific category.</small>
                         </div>
                         
-                        <!-- Category -->
-                        <div class="col-md-6 col-lg-3">
-                            <label for="play_category" class="form-label">Category</label>
-                            <select class="form-select" id="play_category" name="category">
-                                <option value="">Any Category</option>
-                                {% for cat in opentdb_categories %}
-                                    <option value="{{ cat.id }}">{{ cat.name }}</option>
-                                {% endfor %}
-                            </select>
+                        <div class="row g-3">
+                            <!-- Easy Count -->
+                            <div class="col-md-4">
+                                <label for="easy_count" class="form-label">
+                                    <span class="badge bg-success">Easy</span> Questions
+                                </label>
+                                <input type="number" class="form-control difficulty-count" id="easy_count" 
+                                       name="easy_count" value="2" min="0" max="50">
+                            </div>
+                            
+                            <!-- Medium Count -->
+                            <div class="col-md-4">
+                                <label for="medium_count" class="form-label">
+                                    <span class="badge bg-warning text-dark">Medium</span> Questions
+                                </label>
+                                <input type="number" class="form-control difficulty-count" id="medium_count" 
+                                       name="medium_count" value="5" min="0" max="50">
+                            </div>
+                            
+                            <!-- Hard Count -->
+                            <div class="col-md-4">
+                                <label for="hard_count" class="form-label">
+                                    <span class="badge bg-danger">Hard</span> Questions
+                                </label>
+                                <input type="number" class="form-control difficulty-count" id="hard_count" 
+                                       name="hard_count" value="10" min="0" max="50">
+                            </div>
                         </div>
                         
-                        <!-- Difficulty -->
-                        <div class="col-md-6 col-lg-3">
-                            <label for="play_difficulty" class="form-label">Difficulty</label>
-                            <select class="form-select" id="play_difficulty" name="difficulty">
-                                <option value="">Any Difficulty</option>
-                                <option value="easy">Easy</option>
-                                <option value="medium">Medium</option>
-                                <option value="hard">Hard</option>
-                            </select>
+                        <div class="row g-3 mt-2">
+                            <!-- Total Display -->
+                            <div class="col-md-12">
+                                <div class="card bg-light">
+                                    <div class="card-body text-center">
+                                        <h5 class="mb-0">
+                                            Total Questions: <span id="total_count" class="badge bg-primary">17</span>
+                                        </h5>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         
-                        <!-- Type -->
-                        <div class="col-md-6 col-lg-3">
-                            <label for="play_type" class="form-label">Type</label>
-                            <select class="form-select" id="play_type" name="type">
-                                <option value="">Any Type</option>
-                                <option value="multiple">Multiple Choice</option>
-                                <option value="boolean">True/False</option>
-                            </select>
+                        <div class="row g-3 mt-2">
+                            <!-- Category (shared) -->
+                            <div class="col-md-6">
+                                <label for="mixed_play_category" class="form-label">Category</label>
+                                <select class="form-select" id="mixed_play_category" name="category">
+                                    <option value="">Any Category</option>
+                                    {% for cat in opentdb_categories %}
+                                        <option value="{{ cat.id }}">{{ cat.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            
+                            <!-- Type (shared) -->
+                            <div class="col-md-6">
+                                <label for="mixed_play_type" class="form-label">Type</label>
+                                <select class="form-select" id="mixed_play_type" name="type">
+                                    <option value="">Any Type</option>
+                                    <option value="multiple">Multiple Choice</option>
+                                    <option value="boolean">True/False</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                     
@@ -256,5 +352,55 @@ document.getElementById('apiPreviewForm').addEventListener('submit', async (e) =
         responseDiv.textContent = `Error: ${error.message}`;
     }
 });
+
+// Toggle between single and mixed difficulty modes
+function toggleDifficultyMode(mode) {
+    const singleControls = document.getElementById('single_difficulty_controls');
+    const mixedControls = document.getElementById('mixed_difficulty_controls');
+    const modeInput = document.getElementById('difficulty_mode');
+    
+    if (mode === 'mixed') {
+        singleControls.style.display = 'none';
+        mixedControls.style.display = 'block';
+        modeInput.value = 'mixed';
+    } else {
+        singleControls.style.display = 'block';
+        mixedControls.style.display = 'none';
+        modeInput.value = 'single';
+    }
+}
+
+// Update total count for mixed difficulty
+function updateTotalCount() {
+    const easyCount = parseInt(document.getElementById('easy_count').value) || 0;
+    const mediumCount = parseInt(document.getElementById('medium_count').value) || 0;
+    const hardCount = parseInt(document.getElementById('hard_count').value) || 0;
+    
+    const total = easyCount + mediumCount + hardCount;
+    const totalBadge = document.getElementById('total_count');
+    
+    totalBadge.textContent = total;
+    
+    // Change badge color based on validity
+    if (total < 1 || total > 50) {
+        totalBadge.className = 'badge bg-danger';
+    } else {
+        totalBadge.className = 'badge bg-primary';
+    }
+}
+
+// Add event listeners to difficulty count inputs
+document.querySelectorAll('.difficulty-count').forEach(input => {
+    input.addEventListener('input', updateTotalCount);
+});
+
+// Quick preset buttons
+const presetButtons = [
+    { name: 'Balanced', easy: 5, medium: 5, hard: 5 },
+    { name: 'Challenge', easy: 2, medium: 5, hard: 10 },
+    { name: 'Warm-up', easy: 10, medium: 5, hard: 2 }
+];
+
+// Add preset buttons functionality (optional enhancement)
 </script>
 {% endblock %}

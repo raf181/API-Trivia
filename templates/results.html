@@ -76,9 +76,15 @@
                 
                 <!-- Difficulty Badge -->
                 <div class="text-center mb-4">
-                    <span class="badge bg-{{ 'success' if difficulty == 'easy' else 'warning' if difficulty == 'medium' else 'danger' if difficulty == 'hard' else 'secondary' }} fs-5">
-                        {{ difficulty|capitalize if difficulty else 'Any' }} Difficulty
-                    </span>
+                    {% if difficulty.startswith('mixed') %}
+                        <span class="badge bg-info text-dark fs-5">
+                            <i class="bi bi-layers-fill"></i> {{ difficulty|capitalize }}
+                        </span>
+                    {% else %}
+                        <span class="badge bg-{{ 'success' if difficulty == 'easy' else 'warning text-dark' if difficulty == 'medium' else 'danger' if difficulty == 'hard' else 'secondary' }} fs-5">
+                            {{ difficulty|capitalize if difficulty else 'Any' }} Difficulty
+                        </span>
+                    {% endif %}
                 </div>
                 
                 <!-- Save Score Form -->

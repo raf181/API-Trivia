@@ -56,7 +56,7 @@
                 <h5 class="mb-4">{{ question.question }}</h5>
                 
                 <!-- Answer Form -->
-                <form method="POST" action="{{ url_for('answer') }}">
+                <form method="POST" action="{{ url_for('answer') }}" id="answerForm">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     
                     <div class="d-grid gap-3">
@@ -80,17 +80,19 @@
                     </div>
                     
                     <div class="mt-4 d-flex justify-content-between">
-                        <form method="POST" action="{{ url_for('clear_session') }}" class="d-inline">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-outline-danger">
-                                <i class="bi bi-x-circle"></i> Quit Game
-                            </button>
-                        </form>
+                        <button type="button" class="btn btn-outline-danger" id="quitButton">
+                            <i class="bi bi-x-circle"></i> Quit Game
+                        </button>
                         
                         <button type="submit" class="btn btn-primary btn-lg">
                             <i class="bi bi-check-circle-fill"></i> Submit Answer
                         </button>
                     </div>
+                </form>
+                
+                <!-- Hidden form for quitting -->
+                <form method="POST" action="{{ url_for('clear_session') }}" id="quitForm" style="display: none;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 </form>
             </div>
         </div>
@@ -150,6 +152,13 @@ document.querySelectorAll('.answer-card').forEach(card => {
         const input = this.closest('.form-check').querySelector('input[type="radio"]');
         input.checked = true;
     });
+});
+
+// Handle quit button
+document.getElementById('quitButton').addEventListener('click', function() {
+    if (confirm('Are you sure you want to quit? Your progress will be lost.')) {
+        document.getElementById('quitForm').submit();
+    }
 });
 </script>
 {% endblock %}

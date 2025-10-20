@@ -1,3 +1,5 @@
+> **📝 Note:** This documentation was generated with assistance from AI (GitHub Copilot).
+
 # Flask Trivia Dashboard - Quick Start Guide
 
 ## ✅ Project Successfully Created!

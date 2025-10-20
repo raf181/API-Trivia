@@ -1,3 +1,5 @@
+> **📝 Note:** This documentation was generated with assistance from AI (GitHub Copilot).
+
 # Flask Trivia Dashboard
 
 A comprehensive Flask web application that integrates with the [Open Trivia Database (OpenTDB)](https://opentdb.com/) to provide an interactive trivia quiz experience with API exploration, gameplay, and leaderboard tracking.
